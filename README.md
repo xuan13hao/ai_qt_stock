@@ -7,7 +7,7 @@ An AI-powered quantitative trading platform for US stocks using Alpaca Markets A
 Watch the demo video to see the platform in action:
 
 <video width="100%" controls>
-  <source src="video/Quantitative Trading Platform - Google Chrome 2025-12-19 16-40-23.mp4" type="video/mp4">
+  <source src="https://github.com/xuan13hao/ai_qt_stock/blob/main/video/Quantitative%20Trading%20Platform%20-%20Google%20Chrome%202025-12-19%2016-40-23.mp4" type="video/mp4">
   Your browser does not support the video tag.
 </video>
 
