@@ -1,4 +1,4 @@
-# Alpaca Quantitative Trading Platform
+# Quantitative Trading Platform
 
 An AI-powered quantitative trading platform for US stocks using Alpaca Markets API and DeepSeek LLM for intelligent trading decisions.
 
