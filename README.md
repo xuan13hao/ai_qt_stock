@@ -105,9 +105,6 @@ docker run -d -p 8503:8501 \
   alpaca-trading-platform
 ```
 
-### Access the Application
-
-Open your browser and navigate to: **http://localhost:8503**
 
 ## 📖 Usage Guide
 
