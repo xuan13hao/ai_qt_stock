@@ -74,7 +74,7 @@ ALPACA_API_SECRET=your_alpaca_api_secret_here
 ALPACA_PAPER=true  # true for paper trading, false for live trading
 ```
 
-### 5. Run the Application
+### 2. Run the Application
 
 ```bash
 # Using the run script
@@ -84,7 +84,7 @@ python run.py
 streamlit run app.py --server.port 8503
 ```
 
-### 6. Access the Web Interface
+### 3. Access the Web Interface
 
 Open your browser and navigate to: **http://localhost:8503**
 
