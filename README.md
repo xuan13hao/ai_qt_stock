@@ -84,10 +84,6 @@ python run.py
 streamlit run app.py --server.port 8503
 ```
 
-### 3. Access the Web Interface
-
-Open your browser and navigate to: **http://localhost:8503**
-
 ## 🐳 Docker Deployment
 
 ### Using Docker Compose (Recommended)
