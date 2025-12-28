@@ -148,6 +148,57 @@ class AlpacaAIDecision:
                 'error': str(e)
             }
     
+    def analyze_and_decide_v2(self, snapshot) -> Dict:
+        """
+        New version: Decision based on IndicatorSnapshot
+        
+        Args:
+            snapshot: IndicatorSnapshot object
+            
+        Returns:
+            Decision dictionary with LLM proposal
+        """
+        # Check data integrity
+        if not snapshot.has_valid_price:
+            return {
+                'success': False,
+                'error': 'Invalid price data',
+                'proposal': None
+            }
+        
+        # Build prompt (using snapshot data)
+        prompt = self._build_prompt_v2(snapshot)
+        
+        # Call LLM
+        try:
+            response = self._call_deepseek(prompt)
+            proposal = self._parse_proposal_v2(response, snapshot)
+            
+            return {
+                'success': True,
+                'proposal': proposal,
+                'raw_output': response
+            }
+        except Exception as e:
+            self.logger.error(f"AI decision v2 failed: {e}")
+            # Return conservative decision
+            from hard_decision_firewall import LLMProposal
+            return {
+                'success': False,
+                'error': str(e),
+                'proposal': LLMProposal(
+                    symbol=snapshot.symbol,
+                    proposed_action="HOLD",
+                    confidence=0,
+                    evidence={},
+                    params={},
+                    risk_level="high",
+                    warnings=[f"AI decision failed: {str(e)}"],
+                    counter_evidence=[],
+                    notes="Data error or LLM call failed"
+                )
+            }
+    
     def _build_prompt(self, market_data: Dict, account_info: Dict,
                      has_position: bool, position_cost: float, 
                      position_quantity: int) -> str:
@@ -337,6 +388,149 @@ Can consider buying, but must ensure:
         
         return prompt
     
+    def _build_prompt_v2(self, snapshot) -> str:
+        """Build new version of prompt (based on IndicatorSnapshot)"""
+        # Format values first to avoid format specifier errors
+        ma5_str = f"${snapshot.ma5:.2f}" if snapshot.ma5 else "None"
+        ma20_str = f"${snapshot.ma20:.2f}" if snapshot.ma20 else "None"
+        ma60_str = f"${snapshot.ma60:.2f}" if snapshot.ma60 else "None"
+        macd_str = f"{snapshot.macd:.4f}" if snapshot.macd else "None"
+        macd_dea_str = f"{snapshot.macd_dea:.4f}" if snapshot.macd_dea else "None"
+        macd_hist_str = f"{snapshot.macd_hist:.4f}" if snapshot.macd_hist else "None"
+        rsi_str = f"{snapshot.rsi:.2f}" if snapshot.rsi else "None"
+        bb_upper_str = f"${snapshot.bb_upper:.2f}" if snapshot.bb_upper else "None"
+        bb_middle_str = f"${snapshot.bb_middle:.2f}" if snapshot.bb_middle else "None"
+        bb_lower_str = f"${snapshot.bb_lower:.2f}" if snapshot.bb_lower else "None"
+        volume_ratio_str = f"{snapshot.volume_ratio:.2f}" if snapshot.volume_ratio else "None"
+        
+        prompt = f"""
+You are an experienced US stock quantitative trading expert with 15 years of experience.
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ CRITICAL: You MUST use ONLY the provided data fields. DO NOT invent or assume any values.
+⚠️ LANGUAGE: ALL output must be in ENGLISH. Do not use Chinese or any other language.
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[STOCK DATA] - Use ONLY these values:
+═══════════════════════════════════════════════════════════
+Symbol: {snapshot.symbol}
+Price: ${snapshot.price:.2f} {'[INVALID]' if not snapshot.has_valid_price else ''}
+Open: ${snapshot.open:.2f}
+High: ${snapshot.high:.2f}
+Low: ${snapshot.low:.2f}
+Volume: {snapshot.volume:,}
+
+[INDICATORS] - Use ONLY these values (None means missing):
+═══════════════════════════════════════════════════════════
+MA5: {ma5_str}
+MA20: {ma20_str}
+MA60: {ma60_str}
+
+MACD: {macd_str}
+MACD Signal: {macd_dea_str}
+MACD Hist: {macd_hist_str}
+MACD Cross: {snapshot.macd_cross or 'None'}
+
+RSI: {rsi_str}
+
+Bollinger Bands:
+  Upper: {bb_upper_str}
+  Middle: {bb_middle_str}
+  Lower: {bb_lower_str}
+  Position: {snapshot.bb_position or 'None'}
+
+Volume Ratio: {volume_ratio_str}
+
+[PRE-COMPUTED CONDITIONS] - These are already calculated:
+═══════════════════════════════════════════════════════════
+trend_ok: {snapshot.trend_ok} (Price > MA5 > MA20 > MA60)
+volume_ok: {snapshot.volume_ok} (Volume ratio > 1.2)
+macd_ok: {snapshot.macd_ok} (MACD > 0 and golden cross)
+rsi_ok: {snapshot.rsi_ok} (RSI in 50-70)
+breakout_ok: {snapshot.breakout_ok} (Breakthrough resistance)
+bb_ok: {snapshot.bb_ok} (Price near upper/middle band)
+buy_rule_count: {snapshot.buy_rule_count} / 6
+
+[TRADING SESSION]
+═══════════════════════════════════════════════════════════
+Session: {snapshot.session}
+Time ET: {snapshot.timestamp_et.strftime('%Y-%m-%d %H:%M:%S')}
+
+[POSITION]
+═══════════════════════════════════════════════════════════
+Has Position: {snapshot.has_position}
+Position Cost: ${snapshot.position_cost:.2f}
+Position Quantity: {snapshot.position_quantity}
+Position P&L: {snapshot.position_pnl_pct:+.2f}%
+
+[ACCOUNT]
+═══════════════════════════════════════════════════════════
+Equity: ${snapshot.account_equity:,.2f}
+Buying Power: ${snapshot.account_buying_power:,.2f}
+Day P&L: {snapshot.day_pnl_pct:+.2f}%
+
+[RISK STATE]
+═══════════════════════════════════════════════════════════
+Consecutive Losses: {snapshot.consecutive_losses}
+
+[MISSING FIELDS] - Be cautious if these are missing:
+═══════════════════════════════════════════════════════════
+{', '.join(snapshot.missing_fields) if snapshot.missing_fields else 'None'}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+📋 REQUIRED OUTPUT FORMAT (strict JSON):
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+{{
+    "symbol": "{snapshot.symbol}",
+    "proposed_action": "BUY" | "SELL" | "HOLD",
+    "confidence": 0-100,
+    "evidence": {{
+        "trend_ok": true/false,
+        "volume_ok": true/false,
+        "macd_ok": true/false,
+        "rsi_ok": true/false,
+        "breakout_ok": true/false,
+        "bb_ok": true/false,
+        "buy_rule_count": 0-6
+    }},
+    "params": {{
+        "position_size_pct": 10-40,
+        "stop_loss_pct": 3.0-5.0,
+        "take_profit_pct": 5.0-15.0
+    }},
+    "risk_level": "low" | "medium" | "high",
+    "warnings": ["string", ...],
+    "counter_evidence": ["string", ...],  // MUST provide at least 2 items
+    "notes": "200-300 word explanation in ENGLISH ONLY, must reference input fields. Use English language only."
+}}
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ CRITICAL RULES:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. If ANY critical field is None/missing → proposed_action MUST be "HOLD" and add warning
+2. If buy_rule_count < 3 → proposed_action should be "HOLD" (unless strong counter-signals)
+3. MUST provide at least 2 counter_evidence items (risks, concerns, negative signals)
+4. If session != "regular" → risk_level should be "high" and be more conservative
+5. If confidence < 65 → proposed_action should NOT be "BUY"
+6. If signal conflict (e.g., trend_ok=true but macd_ok=false and volume_ok=false) → "HOLD"
+7. MUST reference actual input values in notes (e.g., "MA5={ma5_str}, RSI={rsi_str}")
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+🌐 LANGUAGE REQUIREMENT:
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+⚠️ ALL OUTPUT MUST BE IN ENGLISH:
+- All "notes" field content must be in English
+- All "warnings" must be in English  
+- All "counter_evidence" must be in English
+- Do NOT use Chinese, Japanese, or any other language
+- Use English only for all text fields
+
+Now provide your decision in strict JSON format (ALL TEXT IN ENGLISH):
+"""
+        return prompt
+    
     def _call_deepseek(self, prompt: str) -> str:
         """Call DeepSeek API"""
         system_prompt = "You are an experienced US stock quantitative trading expert. Provide clear, actionable trading decisions in JSON format."
@@ -415,4 +609,74 @@ Can consider buying, but must ensure:
                 'risk_level': 'high',
                 'key_price_levels': {}
             }
+    
+    def _parse_proposal_v2(self, ai_response: str, snapshot) -> 'LLMProposal':
+        """Parse new version of LLM output as LLMProposal"""
+        from hard_decision_firewall import LLMProposal
+        
+        try:
+            # Extract JSON
+            if "```json" in ai_response.lower():
+                json_start = ai_response.lower().find("```json") + 7
+                json_end = ai_response.find("```", json_start)
+                json_str = ai_response[json_start:json_end].strip()
+            elif "```" in ai_response:
+                first_tick = ai_response.find("```")
+                json_start = ai_response.find("\n", first_tick) + 1
+                json_end = ai_response.find("```", json_start)
+                json_str = ai_response[json_start:json_end].strip()
+            elif "{" in ai_response and "}" in ai_response:
+                start_idx = ai_response.find('{')
+                end_idx = ai_response.rfind('}') + 1
+                json_str = ai_response[start_idx:end_idx]
+            else:
+                json_str = ai_response
+            
+            data = json.loads(json_str)
+            
+            # Validate required fields
+            if 'proposed_action' not in data:
+                raise ValueError("Missing 'proposed_action' field")
+            if 'confidence' not in data:
+                raise ValueError("Missing 'confidence' field")
+            
+            # Build LLMProposal
+            proposal = LLMProposal(
+                symbol=data.get('symbol', snapshot.symbol),
+                proposed_action=data.get('proposed_action', 'HOLD'),
+                confidence=int(data.get('confidence', 0)),
+                evidence=data.get('evidence', {}),
+                params=data.get('params', {
+                    'position_size_pct': 20,
+                    'stop_loss_pct': 5.0,
+                    'take_profit_pct': 10.0
+                }),
+                risk_level=data.get('risk_level', 'medium'),
+                warnings=data.get('warnings', []),
+                counter_evidence=data.get('counter_evidence', []),
+                notes=data.get('notes', '')
+            )
+            
+            # Data integrity check: If there are missing fields, force HOLD
+            if snapshot.missing_fields and proposal.proposed_action == "BUY":
+                proposal.proposed_action = "HOLD"
+                proposal.warnings.append(f"Critical indicators missing: {', '.join(snapshot.missing_fields)}")
+                proposal.confidence = max(0, proposal.confidence - 20)
+            
+            return proposal
+            
+        except Exception as e:
+            self.logger.error(f"Failed to parse LLM proposal: {e}")
+            # Return conservative decision
+            return LLMProposal(
+                symbol=snapshot.symbol,
+                proposed_action="HOLD",
+                confidence=0,
+                evidence={},
+                params={},
+                risk_level="high",
+                warnings=[f"Parse failed: {str(e)}"],
+                counter_evidence=["Data parsing error", "Unable to generate valid decision"],
+                notes="LLM output parsing failed, using conservative strategy"
+            )
 

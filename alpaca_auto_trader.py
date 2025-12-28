@@ -1,6 +1,6 @@
 """
 Alpaca Auto Trader
-自动交易监控服务
+Auto Trading Monitoring Service
 """
 
 import time
@@ -14,64 +14,64 @@ from config_manager import config_manager
 
 
 class AlpacaAutoTrader:
-    """Alpaca自动交易服务"""
+    """Alpaca Auto Trading Service"""
     
     def __init__(self, trading_interface=None):
         """
-        初始化自动交易服务
+        Initialize auto trading service
         
         Args:
-            trading_interface: 交易接口
+            trading_interface: Trading interface
         """
         self.logger = logging.getLogger(__name__)
         self.trading = trading_interface
         self.strategy_manager = AlpacaStrategyManager(trading_interface)
         self.running = False
         self.thread = None
-        self.check_interval = 300  # 5分钟检查一次（秒）
+        self.check_interval = 300  # Check every 5 minutes (in seconds)
     
     def set_trading_interface(self, trading_interface):
-        """设置交易接口"""
+        """Set trading interface"""
         self.trading = trading_interface
         self.strategy_manager.set_trading_interface(trading_interface)
     
     def start(self):
-        """启动自动交易服务"""
+        """Start auto trading service"""
         if self.running:
-            self.logger.warning("自动交易服务已在运行")
+            self.logger.warning("Auto trading service is already running")
             return
         
         self.running = True
         self.thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self.thread.start()
-        self.logger.info("自动交易服务已启动")
+        self.logger.info("Auto trading service started")
     
     def stop(self):
-        """停止自动交易服务"""
+        """Stop auto trading service"""
         self.running = False
         if self.thread:
             self.thread.join(timeout=5)
-        self.logger.info("自动交易服务已停止")
+        self.logger.info("Auto trading service stopped")
     
     def _monitor_loop(self):
-        """监控循环"""
+        """Monitoring loop"""
         while self.running:
             try:
-                # 1. 检查止损止盈
+                # 1. Check stop loss/take profit
                 self._check_stop_loss_take_profit()
                 
-                # 2. 执行活跃的策略任务
+                # 2. Execute active strategy tasks
                 self._execute_strategy_tasks()
                 
-                # 等待下次检查
+                # Wait for next check
                 time.sleep(self.check_interval)
                 
             except Exception as e:
-                self.logger.error(f"监控循环错误: {e}")
-                time.sleep(60)  # 错误后等待1分钟再重试
+                self.logger.error(f"Monitoring loop error: {e}")
+                time.sleep(60)  # Wait 1 minute after error before retry
     
     def _check_stop_loss_take_profit(self):
-        """检查止损止盈"""
+        """Check stop loss/take profit"""
         try:
             signals = self.strategy_manager.check_stop_loss_take_profit()
             
@@ -80,10 +80,10 @@ class AlpacaAutoTrader:
                 action = signal['action']
                 reason = signal['reason']
                 
-                self.logger.info(f"[{symbol}] 触发{action}信号: {reason}")
+                self.logger.info(f"[{symbol}] {action} signal triggered: {reason}")
                 
                 if action == 'SELL':
-                    # 获取持仓信息
+                    # Get position information
                     positions = self.trading.get_all_positions()
                     position_quantity = 0
                     
@@ -93,7 +93,7 @@ class AlpacaAutoTrader:
                             break
                     
                     if position_quantity > 0:
-                        # 执行卖出
+                        # Execute sell
                         result = self.trading.sell_stock(
                             symbol=symbol,
                             quantity=position_quantity,
@@ -102,9 +102,9 @@ class AlpacaAutoTrader:
                         )
                         
                         if result.get('success'):
-                            self.logger.info(f"[{symbol}] 自动卖出成功: {position_quantity}股")
+                            self.logger.info(f"[{symbol}] Auto sell successful: {position_quantity} shares")
                             
-                            # 保存交易记录
+                            # Save trade record
                             self.strategy_manager._save_trade_record(
                                 symbol=symbol,
                                 trade_type='SELL',
@@ -116,56 +116,63 @@ class AlpacaAutoTrader:
                                 decision_reason=reason
                             )
                             
-                            # 更新持仓状态
+                            # Update position status
                             self.strategy_manager._update_position_status(symbol, 'sold')
                         else:
-                            self.logger.error(f"[{symbol}] 自动卖出失败: {result.get('error')}")
+                            self.logger.error(f"[{symbol}] Auto sell failed: {result.get('error')}")
                 
         except Exception as e:
-            self.logger.error(f"检查止损止盈失败: {e}")
+            self.logger.error(f"Check stop loss/take profit failed: {e}")
     
     def _execute_strategy_tasks(self):
-        """执行活跃的策略任务"""
+        """Execute active strategy tasks"""
         try:
-            # 获取所有活跃的AI决策任务
+            # Get all active AI decision tasks
             ai_tasks = self.strategy_manager.get_active_tasks('ai_decision')
             
             for task in ai_tasks:
                 symbol = task['symbol']
                 
                 try:
-                    # 执行AI策略（自动交易）
-                    result = self.strategy_manager.execute_ai_strategy(
+                    # Use new version of AI strategy (with hard risk control)
+                    result = self.strategy_manager.execute_ai_strategy_v2(
                         symbol=symbol,
-                        auto_trade=True  # 启用自动交易
+                        auto_trade=True  # Enable auto trading
                     )
                     
                     if result.get('success'):
-                        decision = result.get('decision', {})
-                        action = decision.get('action')
+                        firewall_result = result.get('firewall_result', {})
+                        final_action = firewall_result.get('final_action', 'HOLD')
                         
-                        if action in ['BUY', 'SELL']:
+                        if final_action in ['BUY', 'SELL']:
                             execution_result = result.get('execution_result', {})
-                            if execution_result.get('success'):
-                                self.logger.info(f"[{symbol}] AI策略执行成功: {action}")
+                            if execution_result and execution_result.get('success'):
+                                self.logger.info(f"[{symbol}] AI strategy executed successfully: {final_action}")
+                                self.logger.info(f"[{symbol}] Order ID: {execution_result.get('order_id')}")
                             else:
-                                self.logger.warning(f"[{symbol}] AI策略执行失败: {execution_result.get('error')}")
+                                error_msg = execution_result.get('error', 'Unknown error') if execution_result else 'No execution result'
+                                self.logger.warning(f"[{symbol}] AI strategy execution failed: {error_msg}")
+                        else:
+                            # Rejected by firewall
+                            reject_reasons = firewall_result.get('reject_reasons', [])
+                            if reject_reasons:
+                                self.logger.info(f"[{symbol}] Trade rejected: {', '.join(reject_reasons)}")
                     
                 except Exception as e:
-                    self.logger.error(f"[{symbol}] 执行AI策略任务失败: {e}")
+                    self.logger.error(f"[{symbol}] Execute AI strategy task failed: {e}", exc_info=True)
                 
-                # 避免请求过快
+                # Avoid requests too fast
                 time.sleep(2)
                 
         except Exception as e:
-            self.logger.error(f"执行策略任务失败: {e}")
+            self.logger.error(f"Execute strategy tasks failed: {e}", exc_info=True)
 
 
-# 全局自动交易服务实例
+# Global auto trading service instance
 _auto_trader = None
 
 def get_auto_trader(trading_interface=None) -> AlpacaAutoTrader:
-    """获取自动交易服务实例"""
+    """Get auto trading service instance"""
     global _auto_trader
     
     if _auto_trader is None:

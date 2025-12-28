@@ -56,38 +56,8 @@ https://youtu.be/-yE2kslwVh4)
 ### 1. Clone the Repository
 
 ```bash
-git clone <repository-url>
-cd aiagents-stock
-```
-
-### 2. Create Virtual Environment
-
-```bash
-# Windows (PowerShell)
-python -m venv venv
-.\venv\Scripts\Activate.ps1
-
-# Linux/macOS
-python -m venv venv
-source venv/bin/activate
-```
-
-### 3. Install Dependencies
-
-```bash
-pip install -r requirements.txt
-```
-
-### 4. Configure Environment
-
-Copy the example environment file:
-
-```bash
-# Windows (PowerShell)
-Copy-Item env_example.txt .env
-
-# Linux/macOS
-cp env_example.txt .env
+git clone https://github.com/xuan13hao/ai_qt_stock.git
+cd ai_qt_stock
 ```
 
 Edit `.env` file and configure your API keys:
@@ -104,7 +74,7 @@ ALPACA_API_SECRET=your_alpaca_api_secret_here
 ALPACA_PAPER=true  # true for paper trading, false for live trading
 ```
 
-### 5. Run the Application
+### 2. Run the Application
 
 ```bash
 # Using the run script
@@ -113,10 +83,6 @@ python run.py
 # Or directly with Streamlit
 streamlit run app.py --server.port 8503
 ```
-
-### 6. Access the Web Interface
-
-Open your browser and navigate to: **http://localhost:8503**
 
 ## 🐳 Docker Deployment
 
@@ -139,9 +105,6 @@ docker run -d -p 8503:8501 \
   alpaca-trading-platform
 ```
 
-### Access the Application
-
-Open your browser and navigate to: **http://localhost:8503**
 
 ## 📖 Usage Guide
 
