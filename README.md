@@ -1,4 +1,4 @@
-# Quantitative Trading Platform
+# Quantitative Trading Platform with Hard Risk Control
 
 An AI-powered quantitative trading platform for US stocks using Alpaca Markets API and DeepSeek LLM for intelligent trading decisions.
 
